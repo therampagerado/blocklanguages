@@ -1,0 +1,13 @@
+module_name: Block Languages
+compatible_versions: 1.0.0+
+author: thirty bees
+category: front office
+tags:
+  - facebook
+  - social media
+  - front office
+description_short: The block languages module allows your customers to select between installed languages in your shop.
+description: description.md
+images:
+  - image-1.png
+license: AFL
