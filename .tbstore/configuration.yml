@@ -3,9 +3,9 @@ compatible_versions: 1.0.0+
 author: thirty bees
 category: front office
 tags:
-  - facebook
-  - social media
-  - front office
+  - languages
+  - change lanugae
+  - blocklanguages
 description_short: The block languages module allows your customers to select between installed languages in your shop.
 description: description.md
 images:
