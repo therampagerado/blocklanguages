@@ -24,93 +24,157 @@
  */
 
 if (!defined('_TB_VERSION_'))
-	exit;
+    exit;
 
 class BlockLanguages extends Module
 {
-	public function __construct()
-	{
-		$this->name = 'blocklanguages';
-		$this->tab = 'front_office_features';
-		$this->version = '2.0.2';
-		$this->author = 'thirty bees';
-		$this->need_instance = 0;
+    public function __construct()
+    {
+        $this->name = 'blocklanguages';
+        $this->tab = 'front_office_features';
+        $this->version = '2.0.2';
+        $this->author = 'thirty bees';
+        $this->need_instance = 0;
 
-		parent::__construct();
+        parent::__construct();
 
-		$this->displayName = $this->l('Block Languages');
-		$this->description = $this->l('Adds a block allowing customers to select a language for your store\'s content.');
-		$this->tb_versions_compliancy = '> 1.0.0';
-		$this->tb_min_version = '1.0.0';
-		$this->ps_versions_compliancy = array('min' => '1.6', 'max' => '1.6.99.99');
-	}
+        $this->displayName = $this->l('Block Languages');
+        $this->description = $this->l('Adds a block allowing customers to select a language for your store\'s content.');
+        $this->tb_versions_compliancy = '> 1.0.0';
+        $this->tb_min_version = '1.0.0';
+        $this->ps_versions_compliancy = array('min' => '1.6', 'max' => '1.6.99.99');
+    }
 
-	public function install()
-	{
-		return (parent::install() && $this->registerHook('displayNav') && $this->registerHook('displayHeader'));
-	}
+    /**
+     * @return bool
+     * @throws PrestaShopDatabaseException
+     * @throws PrestaShopException
+     */
+    public function install()
+    {
+        return (
+            parent::install() &&
+            $this->registerHook('displayNav') &&
+            $this->registerHook('displayHeader')
+        );
+    }
 
-	protected function _prepareHook($params)
-	{
-		$languages = Language::getLanguages(true, $this->context->shop->id);
-		if (!count($languages))
-			return false;
-		$link = new Link();
+    /**
+     * Returns true, if this store has multiple languages enabled
+     *
+     * @throws PrestaShopException
+     */
+    public function hasMultipleLanguages()
+    {
+        $languages = Language::getLanguages(true, $this->context->shop->id);
+        return count($languages) > 1;
+    }
 
-		if ((int)Configuration::get('PS_REWRITING_SETTINGS'))
-		{
-			$default_rewrite = array();
-			if (Dispatcher::getInstance()->getController() == 'product' && ($id_product = (int)Tools::getValue('id_product')))
-			{
-				$rewrite_infos = Product::getUrlRewriteInformations((int)$id_product);
-				foreach ($rewrite_infos as $infos)
-					$default_rewrite[$infos['id_lang']] = $link->getProductLink((int)$id_product, $infos['link_rewrite'], $infos['category_rewrite'], $infos['ean13'], (int)$infos['id_lang']);
-			}
+    /**
+     * @param array $params
+     *
+     * @return bool
+     * @throws PrestaShopDatabaseException
+     * @throws PrestaShopException
+     */
+    protected function _prepareHook($params)
+    {
+        if (!$this->hasMultipleLanguages()) {
+            return false;
+        }
 
-			if (Dispatcher::getInstance()->getController() == 'category' && ($id_category = (int)Tools::getValue('id_category')))
-			{
-				$rewrite_infos = Category::getUrlRewriteInformations((int)$id_category);
-				foreach ($rewrite_infos as $infos)
-					$default_rewrite[$infos['id_lang']] = $link->getCategoryLink((int)$id_category, $infos['link_rewrite'], $infos['id_lang']);
-			}
+        if ((int)Configuration::get('PS_REWRITING_SETTINGS')) {
+            $link = $this->context->link;
+            $rewriteUrls = [];
 
-			if (Dispatcher::getInstance()->getController() == 'cms' && (($id_cms = (int)Tools::getValue('id_cms')) || ($id_cms_category = (int)Tools::getValue('id_cms_category'))))
-			{
-				$rewrite_infos = (isset($id_cms) && !isset($id_cms_category)) ? CMS::getUrlRewriteInformations($id_cms) : CMSCategory::getUrlRewriteInformations($id_cms_category);
-				foreach ($rewrite_infos as $infos)
-				{
-					$arr_link = (isset($id_cms) && !isset($id_cms_category)) ?
-						$link->getCMSLink($id_cms, $infos['link_rewrite'], null, $infos['id_lang']) :
-						$link->getCMSCategoryLink($id_cms_category, $infos['link_rewrite'], $infos['id_lang']);
-					$default_rewrite[$infos['id_lang']] = $arr_link;
-				}
-			}
-			$this->smarty->assign('lang_rewrite_urls', $default_rewrite);
-		}
-		return true;
-	}
+            $controller = Dispatcher::getInstance()->getController();
 
-	/**
-	* Returns module content for header
-	*
-	* @param array $params Parameters
-	* @return string Content
-	*/
-	public function hookDisplayTop($params)
-	{
-		if (!$this->_prepareHook($params))
-			return;
-		return $this->display(__FILE__, 'blocklanguages.tpl');
-	}
+            if ($controller === 'product' && ($productId = (int)Tools::getValue('id_product'))) {
+                foreach (Product::getUrlRewriteInformations($productId) as $infos) {
+                    $rewriteUrls[$infos['id_lang']] = $link->getProductLink(
+                        $productId,
+                        $infos['link_rewrite'],
+                        $infos['category_rewrite'],
+                        $infos['ean13'],
+                        (int)$infos['id_lang']
+                    );
+                }
+            }
 
-	public function hookDisplayNav($params)
-	{
+            if ($controller === 'category' && ($categoryId = (int)Tools::getValue('id_category'))) {
+                foreach (Category::getUrlRewriteInformations($categoryId) as $infos) {
+                    $rewriteUrls[$infos['id_lang']] = $link->getCategoryLink(
+                        $categoryId,
+                        $infos['link_rewrite'],
+                        (int)$infos['id_lang']
+                    );
+                }
+            }
 
-		return $this->hookDisplayTop($params);
-	}
+            if ($controller === 'cms' && ($cmsId = (int)Tools::getValue('id_cms'))) {
+                foreach (CMS::getUrlRewriteInformations($cmsId) as $infos) {
+                    $rewriteUrls[$infos['id_lang']] = $link->getCMSLink(
+                        $cmsId,
+                        $infos['link_rewrite'],
+                        null,
+                        (int)$infos['id_lang']
+                    );
+                }
+            }
 
-	public function hookDisplayHeader($params)
-	{
-		$this->context->controller->addCSS($this->_path.'blocklanguages.css', 'all');
-	}
+            if ($controller === 'cms' && ($cmsCategoryId = (int)Tools::getValue('id_cms_category'))) {
+                foreach (CMSCategory::getUrlRewriteInformations($cmsCategoryId) as $infos) {
+                    $rewriteUrls[$infos['id_lang']] = $link->getCMSCategoryLink(
+                        $cmsCategoryId,
+                        $infos['link_rewrite'],
+                        (int)$infos['id_lang']
+                    );
+                }
+            }
+
+            $this->smarty->assign('lang_rewrite_urls', $rewriteUrls);
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns module content for header
+     *
+     * @param array $params Parameters
+     * @return string Content
+     * @throws PrestaShopDatabaseException
+     * @throws PrestaShopException
+     * @throws SmartyException
+     */
+    public function hookDisplayTop($params)
+    {
+        if ($this->_prepareHook($params)) {
+            return $this->display(__FILE__, 'blocklanguages.tpl');
+        }
+        return null;
+    }
+
+    /**
+     * @param array $params
+     * @return string|null
+     * @throws PrestaShopDatabaseException
+     * @throws PrestaShopException
+     * @throws SmartyException
+     */
+    public function hookDisplayNav($params)
+    {
+        return $this->hookDisplayTop($params);
+    }
+
+    /**
+     * @param array $params
+     * @throws PrestaShopException
+     */
+    public function hookDisplayHeader($params)
+    {
+        if ($this->hasMultipleLanguages()) {
+            $this->context->controller->addCSS($this->_path . 'blocklanguages.css', 'all');
+        }
+    }
 }
